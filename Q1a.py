@@ -19,25 +19,19 @@ def download_datasets():
     with zipfile.ZipFile(io.BytesIO(response.content)) as z:
         z.extractall(DATA_DIR)
 
-    print("Datasets downloaded and extracted.")
-
 
 def load_edge_list(file_path):
     edges = np.loadtxt(file_path, dtype=int)
     return edges
 
 def create_simple_undirected_adjacency(edges):
-    # convert to 0-based indexing if needed
     if edges.min() == 1:
         edges = edges - 1
 
-    # remove self-loops
     edges = edges[edges[:, 0] != edges[:, 1]]
 
-    # make undirected by sorting endpoints
     edges = np.sort(edges, axis=1)
 
-    # remove duplicate edges
     edges = np.unique(edges, axis=0)
 
     num_nodes = edges.max() + 1
@@ -53,16 +47,13 @@ def create_simple_undirected_adjacency(edges):
 
 
 def compute_graph_metrics(adj_matrix):
-    # Compute connected components
     num_components, labels = connected_components(adj_matrix, directed=False)
 
-    # Size of each component
     component_sizes = np.bincount(labels)
     largest_component_size = component_sizes.max()
 
-    # Node and edge counts
     num_nodes = adj_matrix.shape[0]
-    num_edges = adj_matrix.nnz // 2# Each edge is counted twice in undirected graphs
+    num_edges = adj_matrix.nnz // 2
 
     return {
         "Number of Nodes": int(num_nodes),
@@ -70,7 +61,6 @@ def compute_graph_metrics(adj_matrix):
         "Number of Components": int(num_components),
         "Largest Component Size": int(largest_component_size),
     }
-
 
 #download_datasets()
 
