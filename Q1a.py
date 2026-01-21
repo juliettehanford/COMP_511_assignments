@@ -1,127 +1,81 @@
-import os
-import zipfile
-import requests
 import numpy as np
-import pandas as pd
 from scipy.sparse import csc_matrix
 from scipy.sparse.csgraph import connected_components
 
-# -------------------------------------------------
-# Data acquisition
-# -------------------------------------------------
+import requests
+import zipfile
+import io
+import os
 
-ZIP_URL = "https://networksciencebook.com/translations/en/resources/networks.zip"
-DATA_DIR = "networks"
+DATA_URL = "https://networksciencebook.com/translations/en/resources/networks.zip"
+DATA_DIR = "data"
 
-def download_and_extract_datasets():
-    if not os.path.exists(DATA_DIR):
-        os.makedirs(DATA_DIR)
+def download_datasets():
+    os.makedirs(DATA_DIR, exist_ok=True)
 
-    zip_path = os.path.join(DATA_DIR, "networks.zip")
+    response = requests.get(DATA_URL)
+    response.raise_for_status()
 
-    if not os.path.exists(zip_path):
-        r = requests.get(ZIP_URL)
-        r.raise_for_status()
-        with open(zip_path, "wb") as f:
-            f.write(r.content)
-
-    with zipfile.ZipFile(zip_path, "r") as z:
+    with zipfile.ZipFile(io.BytesIO(response.content)) as z:
         z.extractall(DATA_DIR)
 
-# -------------------------------------------------
-# Graph construction
-# -------------------------------------------------
+    print("Datasets downloaded and extracted.")
 
-def load_edgelist_as_simple_undirected_graph(path):
-    """
-    Loads an edge list and returns a simple, undirected,
-    unweighted sparse adjacency matrix (CSC).
-    """
-    edges = np.loadtxt(path, dtype=int)
 
-    # Remove self-loops
+def load_edge_list(file_path):
+    edges = np.loadtxt(file_path, dtype=int)
+    return edges
+
+def create_simple_undirected_adjacency(edges):
+    # convert to 0-based indexing if needed
+    if edges.min() == 1:
+        edges = edges - 1
+
+    # remove self-loops
     edges = edges[edges[:, 0] != edges[:, 1]]
 
-    # Reindex nodes to 0...N-1
-    nodes = np.unique(edges)
-    node_map = {node: i for i, node in enumerate(nodes)}
-    edges = np.array([[node_map[u], node_map[v]] for u, v in edges])
+    # make undirected by sorting endpoints
+    edges = np.sort(edges, axis=1)
 
-    n = len(nodes)
+    # remove duplicate edges
+    edges = np.unique(edges, axis=0)
 
-    # Create undirected edges (symmetrize)
-    rows = np.concatenate([edges[:, 0], edges[:, 1]])
-    cols = np.concatenate([edges[:, 1], edges[:, 0]])
-    data = np.ones(len(rows), dtype=int)
+    num_nodes = edges.max() + 1
 
-    A = csc_matrix((data, (rows, cols)), shape=(n, n))
+    A = csc_matrix(
+    (np.ones(len(edges)), (edges[:, 0], edges[:, 1])),
+    shape=(num_nodes, num_nodes)
+    )
 
-    # Remove multi-edges (force binary)
-    A.data[:] = 1
-    A.eliminate_zeros()
+    A = A + A.T
 
     return A
 
-# -------------------------------------------------
-# Reusable computations (Q1a)
-# -------------------------------------------------
 
-def graph_size_stats(A):
-    """
-    Returns:
-    - number of nodes
-    - number of edges
-    """
-    n_nodes = A.shape[0]
-    n_edges = A.nnz // 2  # undirected
-    return n_nodes, n_edges
+def compute_graph_metrics(adj_matrix):
+    # Compute connected components
+    num_components, labels = connected_components(adj_matrix, directed=False)
 
-def connected_component_stats(A):
-    """
-    Returns:
-    - number of connected components
-    - size of the largest connected component
-    """
-    n_components, labels = connected_components(A, directed=False)
+    # Size of each component
     component_sizes = np.bincount(labels)
-    giant_size = component_sizes.max()
-    return n_components, giant_size
+    largest_component_size = component_sizes.max()
 
-# -------------------------------------------------
-# Main analysis
-# -------------------------------------------------
+    # Node and edge counts
+    num_nodes = adj_matrix.shape[0]
+    num_edges = adj_matrix.nnz // 2# Each edge is counted twice in undirected graphs
 
-def analyze_datasets(dataset_files):
-    results = []
-
-    for name, path in dataset_files.items():
-        A = load_edgelist_as_simple_undirected_graph(path)
-
-        n_nodes, n_edges = graph_size_stats(A)
-        n_components, giant_size = connected_component_stats(A)
-
-        results.append({
-            "Dataset": name,
-            "Nodes": n_nodes,
-            "Edges": n_edges,
-            "Connected Components": n_components,
-            "Giant Component Size": giant_size
-        })
-
-    return pd.DataFrame(results)
-
-# -------------------------------------------------
-# Execution
-# -------------------------------------------------
-
-if __name__ == "__main__":
-    download_and_extract_datasets()
-
-    datasets = {
-        "Karate Club": os.path.join(DATA_DIR, "karate.edgelist"),
-        "Dolphins": os.path.join(DATA_DIR, "dolphins.edgelist"),
-        "Email-Enron": os.path.join(DATA_DIR, "email-Enron.edgelist")
+    return {
+        "Number of Nodes": int(num_nodes),
+        "Number of Edges": int(num_edges),
+        "Number of Components": int(num_components),
+        "Largest Component Size": int(largest_component_size),
     }
 
-    table = analyze_datasets(datasets)
-    print(table.to_string(index=False))
+
+#download_datasets()
+
+edges = load_edge_list("data/protein.edgelist.txt")
+A = create_simple_undirected_adjacency(edges)
+metrics = compute_graph_metrics(A)
+
+print(metrics)
