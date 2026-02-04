@@ -1,2 +1,10 @@
 *.edgelist.txt
 networks.zip
+
+# A2 downloaded data
+A2/classic_graph_data/
+A2/classic_graph_data_cleaned/
+A2/labeled_graph_data/
+A2/email-Enron/
+A2/email-Enron.tar.gz
+A2/gephi_export/
